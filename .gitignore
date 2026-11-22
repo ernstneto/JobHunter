@@ -1,0 +1,25 @@
+# Environment files and local credentials
+.env*
+!.env.example
+
+# JavaScript / Next.js
+node_modules/
+.next/
+coverage/
+dist/
+build/
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local output and workspace notes
+output.txt
+history_chat.txt
+handoff.txt
+
+# OS-generated files
+.DS_Store
+Thumbs.db

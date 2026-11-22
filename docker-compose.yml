@@ -1,0 +1,146 @@
+# ============================================
+# JobHunter AI — Docker Compose
+# Optimized for low-spec machines (2016 PC)
+# ============================================
+# Usage:
+#   docker compose up -d          # Start all
+#   docker compose up postgres    # Start only DB
+#   docker compose up api-gateway # Start only Go API
+# ============================================
+
+version: "3.9"
+
+services:
+# ---------------------------- DATABASE -----------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: jh-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-jobhunter}
+      POSTGRES_USER: ${POSTGRES_USER:-jobhunter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+    ports:
+      "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jobhunter}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+# ──────────────── CACHE & QUEUE ────────────────
+redis:
+  image: redis:7-alpine
+  container_name: jh-redis
+  restart: unless-stopped
+  ports:
+    "6379:6379"
+  volumes:
+    - redis_data:/data
+  deploy:
+    resources:
+      limits:
+        memory: 128M
+        cpus: "0.25"
+  command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+
+# --------------------------- GO: API GATEWAY ---------------------------------
+api-gateway:
+  build:
+    context: ./services/api-gateway
+    dockerfile: Dockerfile
+  container_name: jh-api-gateway
+  restart: unless-stopped
+  ports:
+    "8080:8080"
+  environment:
+    - APP_ENV=${APP_ENV:-development}
+    - APP_PORT=8080
+    - JWT_SECRET=${JWT_SECRET:-change_me}
+    - JWT_EXPIRATION=${JWT_EXPIRATION_HOURS:-24}
+    - POSTGRES_HOST=postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_DB=${POSTGRES_DB:-jobhunter}
+    - POSTGRES_USER=${POSTGRES_USER:-jobhunter}
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change_me}
+    - REDIS_HOST=redis
+    - REDIS_PORT=6379
+    - AI_SERVICE_URL=http://api-service:8000
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+  deploy:
+    resources:
+      limits:
+        memory: 128M
+        cpus: "0.5"
+# ------------------------ PYTHON: AI SERVICE ---------------------------------
+ai-service:
+  build:
+    context: ./services/ai-service
+    dockerfile: Dockerfile
+  container_name: jh-ai-service
+  restart: unless-stopped
+  ports:
+    - "8000:8000"
+  environment:
+    - APP_ENV=${APP_ENV:-development}
+    - APP_PORT=8080
+    - JWT_SECRET=${JWT_SECRET:-change_me}
+    - JWT_EXPIRATION=${JWT_EXPIRATION_HOURS:-24}
+    - POSTGRES_HOST=postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_DB=${POSTGRES_DB:-jobhunter}
+    - POSTGRES_USER=${POSTGRES_USER:-jobhunter}
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change_me}
+    - REDIS_HOST=redis
+    - REDIS_PORT=6379
+    - GROQ_API_KEY=${GROQ_API_KEY:-}
+    - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
+    - JSEARCH_API_KEY=${JSEARCH_API_KEY:-}
+    - JSEARCH_API_HOST=${JSEARCH_API_HOST:-jsearch.p.rapidapi.com}
+    - SERPER_API_KEY=${SERPER_API_KEY:-}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+  deploy:
+    resources:
+      limits:
+        memory: 512M
+        cpus: "1.0"
+# --------------------- N8N (Automation) --------------------------
+n8n:
+  image: n8nio/n8n:latest
+  container_name: jh-n8n
+  restart: unless-stopped
+  ports:
+    - "5878:5678"
+  environment:
+    - N8N_BASIC_AUTH_ACTIVE=true
+    - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
+    - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:-change_me}
+    - N8N_HOST=localhost
+    - N8N_PORT=5678
+    - N8N_PROTOCOL=http
+    - GENERIC_TIMEZONE=America/Sao_Paulo
+  volumes:
+    - n8n_data:/home/node/.n8n
+  deploy:
+    resources:
+      limits:
+        memory: 256M
+        cpus: "0.5"
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
