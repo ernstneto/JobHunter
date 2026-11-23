@@ -18,7 +18,7 @@ export async function fetchSkillQuiz(jobId: string, missingSkills: string[]): Pr
     const response = await apiClient.get<QuizResponse>("/api/v1/cv/quiz", {
         params: {
             job_id: jobId,
-            missingSkills: missingSkills.join(","),
+            missing_skills: missingSkills.join(","),
         },
     });
     return response.data;

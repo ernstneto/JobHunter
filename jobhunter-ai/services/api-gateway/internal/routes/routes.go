@@ -39,6 +39,7 @@ func Setup(router *gin.Engine, cfg *config.Config) {
 			protected.POST("/jobs/scrape", job.TriggerScrape)
 
 			cv := handlers.NewCVHandler(cfg)
+			protected.GET("/cv/quiz", cv.Quiz)
 			protected.POST("/cv/generate", cv.Generate)
 			protected.GET("/cv/versions", cv.ListVersions)
 			protected.GET("/cv/versions/:id", cv.GetVersion)

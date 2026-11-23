@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jobhunter-ai/api-gateway/internal/config"
@@ -17,16 +18,56 @@ func NewCVHandler(cfg *config.Config) *CVHandler {
 	return &CVHandler{cfg: cfg}
 }
 
-func (h *CVHandler) Generate(c *gin.Context) {
-	aiURL := fmt.Sprintf("%s/api/v1/cv/generate", h.cfg.AIServiceURL)
-	resp, err := http.Post(aiURL, "application/json", c.Request.Body)
+// proxyRequest repassa a requisicao para o ai-service (FastAPI) e retorna a
+// resposta com o mesmo status. Copia method, query params, body e o header
+// Authorization, e aplica timeout para evitar travamentos.
+func (h *CVHandler) proxyRequest(c *gin.Context, path string) {
+	aiURL := fmt.Sprintf("%s%s", h.cfg.AIServiceURL, path)
+	if q := c.Request.URL.RawQuery; q != "" {
+		aiURL += "?" + q
+	}
+
+	var body io.Reader
+	if c.Request.Body != nil && c.Request.Method != http.MethodGet {
+		body = c.Request.Body
+	}
+
+	req, err := http.NewRequestWithContext(c.Request.Context(), c.Request.Method, aiURL, body)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "AI service unavailable"})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Invalid proxy request"})
+		return
+	}
+
+	if ct := c.GetHeader("Content-Type"); ct != "" {
+		req.Header.Set("Content-Type", ct)
+	}
+	if auth := c.GetHeader("Authorization"); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "AI service unavailable", "detail": err.Error()})
 		return
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	c.Data(resp.StatusCode, "application/json", body)
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to read AI service response"})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
+}
+
+func (h *CVHandler) Quiz(c *gin.Context) {
+	h.proxyRequest(c, "/api/v1/cv/quiz")
+}
+
+func (h *CVHandler) Generate(c *gin.Context) {
+	h.proxyRequest(c, "/api/v1/cv/generate")
 }
 
 func (h *CVHandler) ListVersions(c *gin.Context) {

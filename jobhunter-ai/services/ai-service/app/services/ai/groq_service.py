@@ -221,9 +221,9 @@ DO NOT include any markdown or other text.
                 return questions[:3]
     except Exception as e:
         logger.error(f"Error generating skill quiz: {str(e)}")
-
-    # Fallback determinístico se a API falhar
-    return [f"Do you have experience with {skill}?" for skill in top_skills]
+        # A chave está configurada, mas a chamada falhou: levanta o erro real
+        # em vez de mascarar com perguntas de fallback.
+        raise RuntimeError(f"Falha ao gerar o quiz via Groq: {e}")
 
 async def generate_tailored_cv(
     query: str,
@@ -292,4 +292,6 @@ Do NOT use markdown symbols like '#' or '*' in the output, just plain text with 
             return cv_text
     except Exception as e:
         logger.error(f"Error generating tailored CV: {str(e)}")
-        return f"Error generating CV. Fallback text: {master_cv_text[:500]}"
+        # A chave está configurada, mas a chamada falhou: levanta o erro real
+        # em vez de mascarar com texto de fallback.
+        raise RuntimeError(f"Falha ao gerar o CV via Groq: {e}")
