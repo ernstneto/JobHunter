@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { searchJobs } from "@/services/jobService";
 import { isAuthenticated, logout } from "@/lib/auth";
+import { useJobTracker } from "@/lib/JobTrackerContext";
 import JobCard from "@/components/JobCard";
 import type { Job } from "@/types/job";
 import Link from "next/link";
@@ -15,8 +16,55 @@ export default function JobsPage() {
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [nextPage, setNextPage] = useState<number | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [showApplied, setShowApplied] = useState(false);
+
+  const { applications } = useJobTracker();
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // IDs das vagas já candidatadas (Track de Candidaturas)
+  const appliedIds = useMemo(
+    () => new Set(applications.map((a) => a.job_id)),
+    [applications]
+  );
+
+  // Jobs visíveis: esconde as já candidatadas (pode liberar com o toggle)
+  const visibleJobs = useMemo(() => {
+    if (showApplied) return jobs;
+    return jobs.filter((j) => !appliedIds.has(j.job_id));
+  }, [jobs, appliedIds, showApplied]);
+  const hiddenAppliedCount = jobs.length - visibleJobs.length;
+
+  const mergeJobs = useCallback((incoming: Job[]) => {
+    setJobs((prev) => {
+      const seen = new Set(prev.map((j) => j.job_id));
+      const merged = [...prev];
+      for (const job of incoming) {
+        if (!seen.has(job.job_id)) {
+          seen.add(job.job_id);
+          merged.push(job);
+        }
+      }
+      return merged;
+    });
+  }, []);
+
+  const runSearch = useCallback(
+    async (page: number, numPages: number, expand: boolean) =>
+      searchJobs({
+        query: query.trim(),
+        country,
+        remote: remoteOnly || undefined,
+        page,
+        num_pages: numPages,
+        expand_variants: expand,
+      }),
+    [query, country, remoteOnly]
+  );
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -33,15 +81,21 @@ export default function JobsPage() {
 
     setLoading(true);
     setError(null);
+    setJobs([]);
+    setNextPage(null);
+    setHasMore(false);
+    setShowApplied(false);
+    setSearched(false);
 
     try {
-      const result = await searchJobs({
-        query: query.trim(),
-        country,
-        remote: remoteOnly || undefined,
-      });
+      // Primeira busca: 2 páginas + variantes de consulta
+      const result = await runSearch(1, 2, true);
       setJobs(result.jobs);
       setSearched(true);
+      if (result.jobs.length > 0) {
+        setNextPage(3); // páginas 1 e 2 já vieram
+        setHasMore(true);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to search jobs";
       setError(message);
@@ -50,6 +104,42 @@ export default function JobsPage() {
       setLoading(false);
     }
   }
+
+  const handleLoadMore = useCallback(async () => {
+    if (!nextPage || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      // Páginas sequenciais da consulta principal (sem variantes)
+      const result = await runSearch(nextPage, 1, false);
+      if (result.jobs.length > 0) {
+        mergeJobs(result.jobs);
+        setNextPage(nextPage + 1);
+      } else {
+        setHasMore(false);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to load more jobs";
+      setError(message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextPage, loadingMore, hasMore, runSearch, mergeJobs]);
+
+  // Scroll infinito: ao chegar perto do fim, carrega a próxima página
+  useEffect(() => {
+    if (!hasMore || loading || loadingMore) return;
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) handleLoadMore();
+      },
+      { rootMargin: "300px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, handleLoadMore]);
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -148,26 +238,72 @@ export default function JobsPage() {
         )}
 
         {/* Results */}
-        {!loading && jobs.length > 0 && (
+        {!loading && searched && visibleJobs.length > 0 && (
           <>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <h2 className="text-lg font-semibold text-gray-900">
-                {jobs.length} job{jobs.length !== 1 ? "s" : ""} found
+                {visibleJobs.length} job{visibleJobs.length !== 1 ? "s" : ""} found
               </h2>
+              {hiddenAppliedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowApplied(!showApplied)}
+                  className="text-xs text-gray-500 hover:text-gray-800 underline"
+                >
+                  {showApplied
+                    ? "Ocultar aplicadas"
+                    : `${hiddenAppliedCount} vaga${hiddenAppliedCount !== 1 ? "s" : ""} já candidatada${hiddenAppliedCount !== 1 ? "s" : ""} (ocultadas)`}
+                </button>
+              )}
             </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {jobs.map((job) => (
+              {visibleJobs.map((job) => (
                 <JobCard key={job.job_id} job={job} />
               ))}
             </div>
+
+            {/* Sentinel + Load more */}
+            {hasMore && (
+              <div ref={sentinelRef} className="flex flex-col items-center py-6">
+                {loadingMore && (
+                  <div className="inline-block animate-spin rounded-full h-7 w-7 border-b-2 border-primary-600 mb-2"></div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-semibold disabled:opacity-50 text-sm"
+                >
+                  {loadingMore ? "Carregando mais..." : "⬇ Carregar mais vagas"}
+                </button>
+              </div>
+            )}
           </>
         )}
 
-        {/* Empty state */}
-        {!loading && searched && jobs.length === 0 && !error && (
+        {/* Empty states */}
+        {!loading && searched && visibleJobs.length === 0 && (
           <div className="text-center py-12 text-gray-500">
-            <p className="text-lg">No jobs found for "{query}"</p>
-            <p className="text-sm mt-2">Try a different keyword or country.</p>
+            {hiddenAppliedCount > 0 ? (
+              <>
+                <p className="text-lg">
+                  Todas as vagas encontradas já foram candidatadas 🙏
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowApplied(true)}
+                  className="mt-3 px-5 py-2 bg-primary-600 text-white text-sm rounded-lg font-semibold hover:bg-primary-700 transition"
+                >
+                  Mostrar vagas aplicadas
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-lg">No jobs found for "{query}"</p>
+                <p className="text-sm mt-2">Try a different keyword or country.</p>
+              </>
+            )}
           </div>
         )}
 

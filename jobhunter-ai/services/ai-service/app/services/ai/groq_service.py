@@ -77,7 +77,7 @@ async def calculate_batch_match(
         return jobs
 
     # Prepara payload em lote
-    jobs_to_analyze = jobs[:5]
+    jobs_to_analyze = jobs[:10]
     jobs_payload = [{
         "job_id": j.job_id,
         "title": j.title,

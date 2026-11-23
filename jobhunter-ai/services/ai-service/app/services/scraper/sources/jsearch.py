@@ -23,7 +23,14 @@ class JSearchScraper(BaseScraper):
     def is_available(self) -> bool:
         return bool(self.api_key)
 
-    async def search(self, query: str, country: str = "us", remote: bool = False) -> List[JobListing]:
+    async def search(
+        self,
+        query: str,
+        country: str = "us",
+        remote: bool = False,
+        page: int = 1,
+        num_pages: int = 2
+    ) -> List[JobListing]:
         if not self.is_available():
             logger.warning("JSEARCH_API_KEY is not configured.")
             return []
@@ -35,8 +42,8 @@ class JSearchScraper(BaseScraper):
 
         params: Dict[str, Any] = {
             "query": query,
-            "page": "1",
-            "num_pages": "1",
+            "page": str(page),
+            "num_pages": str(num_pages),
             "country": country,
         }
 

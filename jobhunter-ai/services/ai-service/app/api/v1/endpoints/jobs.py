@@ -12,12 +12,22 @@ engine = ScraperEngine()
 async def search_jobs(
     q: str = Query(..., description="Job title or keywords"),
     country: Optional[str] = Query("us", description="Country code (us, br, ca, etc)"),
-    remote: Optional[bool] = Query(None, description="Filter for remote jobs")
+    remote: Optional[bool] = Query(None, description="Filter for remote jobs"),
+    page: int = Query(1, ge=1, description="Página inicial para buscar (1-based)"),
+    num_pages: int = Query(2, ge=1, le=5, description="Número de páginas por chamada"),
+    expand_variants: bool = Query(True, description="Expandir consulta com variantes de sinônimos"),
 ):
     try:
-        # 1. Scraping das vagas via JSearch
-        result = await engine.search(query=q, country=country, remote=remote)
-        
+        # 1. Scraping das vagas via JSearch (paginado + variantes de consulta)
+        result = await engine.search(
+            query=q,
+            country=country,
+            remote=remote,
+            page=page,
+            num_pages=num_pages,
+            expand_variants=expand_variants
+        )
+
         # 2. Perfil do Usuario (Sprint 2.2)
         default_user_profile = UserProfile()
 
