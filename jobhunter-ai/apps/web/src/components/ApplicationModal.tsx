@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Job } from "@/types/job";
 import { useJobTracker } from "@/lib/JobTrackerContext";
 import { STATUS_META, STATUS_ORDER, type ApplicationStatus } from "@/lib/jobTracker";
@@ -20,6 +20,15 @@ export default function ApplicationModal({ job, cvText, onClose }: ApplicationMo
   const [note, setNote] = useState<string>(existing?.note ?? "");
   const [saveCv, setSaveCv] = useState<boolean>(Boolean(existing?.cv_text || cvText));
   const [registered, setRegistered] = useState<boolean>(false);
+
+  // Fechar com a tecla Escape
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
 
   const handleRegister = () => {
     const result = addApplication({

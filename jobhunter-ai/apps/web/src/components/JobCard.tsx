@@ -5,6 +5,7 @@ import type { Job } from "@/types/job";
 import { fetchSkillQuiz, generateTailoredCv } from "@/services/cvService";
 import { useJobTracker } from "@/lib/JobTrackerContext";
 import { useProfile } from "@/lib/ProfileContext";
+import { saveTailoredCv } from "@/lib/cvStorage";
 import SkillQuiz from "./SkillQuiz";
 import CVPreviewModal from "./CVPreviewModal";
 import ApplicationModal from "./ApplicationModal";
@@ -57,20 +58,13 @@ export default function JobCard({ job }: { job: Job }) {
   const scorePercent = Math.round(Number(job.match_score || 0) * 100);
   const seniorityStr = job.required_seniority ? String(job.required_seniority) : "";
 
-  // 1. Inicia o fluxo carregando o Quiz de Skills
+  // 1. Inicia o fluxo carregando o Quiz de Skills (sempre, sem gerar automaticamente)
   const handleStartTailoring = async () => {
     setQuizError(null);
     setCvError(null);
-    const gaps = job.missing_skills || [];
-    if (gaps.length === 0) {
-      // Se nao houver gaps, gera direto
-      handleGenerateCv([]);
-      return;
-    }
-
     setLoadingQuiz(true);
     try {
-      const res = await fetchSkillQuiz(job.job_id, gaps);
+      const res = await fetchSkillQuiz(job.job_id, job.missing_skills || []);
       setQuizQuestions(res.questions);
     } catch (err: unknown) {
       // Nao pula o quiz: o fluxo do produto exige o quiz antes de gerar o CV.
@@ -82,7 +76,7 @@ export default function JobCard({ job }: { job: Job }) {
     }
   };
 
-  // 2. Chama a geracao de CV apos resposta do Quiz
+  // 2. Chama a geracao de CV apos resposta do Quiz e abre o preview em nova aba
   const handleGenerateCv = async (confirmedSkills: string[]) => {
     setQuizQuestions(null);
     setQuizError(null);
@@ -99,7 +93,19 @@ export default function JobCard({ job }: { job: Job }) {
         master_cv_text: masterCvText,
       });
 
-      setTailoredCvText(res.cv_text);
+      // Salvar a versão e abrir o processamento do CV em uma nova aba
+      saveTailoredCv({
+        cv_text: res.cv_text,
+        job_title: job.title,
+        company: job.company,
+      });
+      const url = `/cv-preview?job_title=${encodeURIComponent(job.title)}&company=${encodeURIComponent(job.company)}`;
+      const opened = window.open(url, "_blank");
+
+      // Popup bloqueado pelo navegador: fallback para o modal inline
+      if (!opened) {
+        setTailoredCvText(res.cv_text);
+      }
     } catch (err: unknown) {
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;

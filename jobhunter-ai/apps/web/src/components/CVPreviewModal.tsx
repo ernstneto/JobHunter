@@ -1,6 +1,6 @@
-"use_client";
+"use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface CVPreviewModalProps {
     jobTitle: string;
@@ -11,6 +11,15 @@ interface CVPreviewModalProps {
 
 export default function CVPreviewModal({ jobTitle, company, cvText, onClose }: CVPreviewModalProps) {
     const [copied, setCopied] = useState(false);
+
+    // Fechar com a tecla Escape
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onClose();
+        };
+        window.addEventListener("keydown", handleKey);
+        return () => window.removeEventListener("keydown", handleKey);
+    }, [onClose]);
 
     const handleCopy = () => {
         navigator.clipboard.writeText(cvText);
@@ -32,14 +41,20 @@ export default function CVPreviewModal({ jobTitle, company, cvText, onClose }: C
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-            <div className="gb-white rounded-x1 shadow-2x1 max-w-3x1 w-full max-h-[90vh] flex-col p-6">
+            <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col p-6">
                 {/* Header */}
                 <div className="flex justify-between items-center pb-4 border-b border-gray-200">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900">📄 Tailored CV — ATS Plain-Text View</h2>
                         <p className="text-xs text-gray-500 mt-0.5">Optimized for {jobTitle} at {company}</p>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover::text-gray-600 text-lg font-bold"></button>
+                    <button
+                        onClick={onClose}
+                        className="text-gray-400 hover:text-gray-600 text-lg font-bold px-2 leading-none"
+                        aria-label="Fechar"
+                    >
+                        ✕
+                    </button>
                 </div>
 
                 {/* ATS Plain-Text Terminal Preview */}
@@ -48,26 +63,26 @@ export default function CVPreviewModal({ jobTitle, company, cvText, onClose }: C
                 </div>
 
                 {/* Action Toolbar */}
-                <div className="flex flex-wrap items-center justif-between gap-3 pt-3 border-t border-gray-200">
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-200">
                     <span className="text-xs text-gray-500">✓ Plain-Text Verified — 0 Syntax Errors</span>
                     <div className="flex gap-2">
                         <button
-                        onClick={handleCopy}
-                        className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-lg transition"
+                            onClick={handleCopy}
+                            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-lg transition"
                         >
-                        {copied ? "✓ Copied!" : "📋 Copy Text"}
+                            {copied ? "✓ Copied!" : "📋 Copy Text"}
                         </button>
                         <button
-                        onClick={() => handleDownload("txt")}
-                        className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-lg transition"
+                            onClick={() => handleDownload("txt")}
+                            className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-lg transition"
                         >
-                        ⬇ Download .TXT
+                            ⬇ Download .TXT
                         </button>
                         <button
-                        onClick={() => handleDownload("md")}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg transition"
+                            onClick={() => handleDownload("md")}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg transition"
                         >
-                        ⬇ Download .MD
+                            ⬇ Download .MD
                         </button>
                     </div>
                 </div>
