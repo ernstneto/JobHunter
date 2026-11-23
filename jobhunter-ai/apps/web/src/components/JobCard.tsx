@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import type { Job } from "@/types/job";
-import { fetchSkillQuiz, generateTailoredCv } from "@/services/cvservice";
+import { fetchSkillQuiz, generateTailoredCv } from "@/services/cvService";
+import { useJobTracker } from "@/lib/JobTrackerContext";
 import SkillQuiz from "./SkillQuiz";
 import CVPreviewModal from "./CVPreviewModal";
+import ApplicationModal from "./ApplicationModal";
 
 function getTypeBadgeColor(type: string): string {
   switch (type.toLowerCase()) {
@@ -30,6 +32,10 @@ export default function JobCard({ job }: { job: Job }) {
   const [quizQuestions, setQuizQuestions] = useState<string[] | null>(null);
   const [generatingCv, setGeneratingCv] = useState(false);
   const [tailoredCvText, setTailoredCvText] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+
+  const { getByJobId } = useJobTracker();
+  const tracked = Boolean(getByJobId(job.job_id));
   
   const scorePercent = Math.round(Number(job.match_score || 0) * 100);
   const seniorityStr = job.required_seniority ? String(job.required_seniority) : "";
@@ -182,6 +188,17 @@ Professional Experience:
             {loadingQuiz ? "Loading Quiz..." : generatingCv ? "Creating CV..." : "✨ Tailor CV"}
           </button>
 
+          <button
+            onClick={() => setApplying(true)}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition border ${
+              tracked
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200 cursor-default"
+                : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200"
+            }`}
+          >
+            {tracked ? "✓ No Tracker" : "📝 Candidatar-se"}
+          </button>
+
           <a
             href={job.url}
             target="_blank"
@@ -209,6 +226,14 @@ Professional Experience:
           company={job.company}
           cvText={tailoredCvText}
           onClose={() => setTailoredCvText(null)}
+        />
+      )}
+
+      {applying && (
+        <ApplicationModal
+          job={job}
+          cvText={tailoredCvText}
+          onClose={() => setApplying(false)}
         />
       )}
     </>

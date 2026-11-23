@@ -6,6 +6,7 @@ import { searchJobs } from "@/services/jobService";
 import { isAuthenticated, logout } from "@/lib/auth";
 import JobCard from "@/components/JobCard";
 import type { Job } from "@/types/job";
+import Link from "next/link";
 
 export default function JobsPage() {
   const router = useRouter();
@@ -56,12 +57,20 @@ export default function JobsPage() {
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900">🎯 JobHunter AI</h1>
-          <button
-            onClick={logout}
-            className="text-sm text-gray-600 hover:text-gray-900 font-medium"
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/applications"
+              className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+            >
+              📋 Track de Candidaturas
+            </Link>
+            <button
+              onClick={logout}
+              className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
