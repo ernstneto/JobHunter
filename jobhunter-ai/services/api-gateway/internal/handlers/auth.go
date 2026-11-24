@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jobhunter-ai/api-gateway/internal/config"
 	"github.com/jobhunter-ai/api-gateway/internal/middleware"
 	"golang.org/x/crypto/bcrypt"
@@ -87,6 +88,50 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 }
 
+// RefreshRequest é o body esperado no endpoint /auth/refresh.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// RefreshToken valida o refresh token (assinatura + expiração) e emite um
+// novo access token. Sem persistência: o refresh token é um JWT válido, e
+// o novo access token é gerado com as mesmas claims (mock de auth atual).
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Token refreshed"})
+	var req RefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		return
+	}
+
+	token, err := jwt.ParseWithClaims(req.RefreshToken, &middleware.Claims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return []byte(h.cfg.JWTSecret), nil
+	})
+	if err != nil || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired refresh token"})
+		return
+	}
+
+	claims, ok := token.Claims.(*middleware.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
+		return
+	}
+
+	accessToken, err := middleware.GenerateToken(
+		claims.UserID, claims.Email, claims.TenantID,
+		h.cfg.JWTSecret, h.cfg.JWTExpirationHours,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to issue access token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token": accessToken,
+		"token_type":   "Bearer",
+		"expires_in":   h.cfg.JWTExpirationHours * 3600,
+	})
 }

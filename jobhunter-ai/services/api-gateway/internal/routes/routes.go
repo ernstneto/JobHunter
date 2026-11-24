@@ -34,11 +34,16 @@ func Setup(router *gin.Engine, cfg *config.Config) {
 			protected.PUT("/users/me", user.UpdateProfile)
 
 			job := handlers.NewJobHandler(cfg)
-			protected.GET("/jobs", job.Search)
+			protected.POST("/jobs", job.Search)
 			protected.GET("/jobs/:id", job.GetByID)
 			protected.POST("/jobs/scrape", job.TriggerScrape)
 
+			profile := handlers.NewProfileHandler(cfg)
+			protected.POST("/profile/parse-linkedin", profile.ParseLinkedIn)
+			protected.GET("/profile/github/:username", profile.GetGitHub)
+
 			cv := handlers.NewCVHandler(cfg)
+			protected.GET("/cv/quiz", cv.Quiz)
 			protected.POST("/cv/generate", cv.Generate)
 			protected.GET("/cv/versions", cv.ListVersions)
 			protected.GET("/cv/versions/:id", cv.GetVersion)

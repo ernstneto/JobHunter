@@ -1,5 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
+from app.models.user import UserProfile
 
 class JobListing(BaseModel):
     job_id: str
@@ -24,3 +25,16 @@ class JobSearchResponse(BaseModel):
     total: int
     query: str
     sources_used: List[str]
+
+class JobSearchRequest(BaseModel):
+    """Request body da busca de vagas (POST /jobs/search).
+
+    Inclui o perfil do usuario para o cálculo de match real.
+    """
+    query: str
+    country: str = "us"
+    remote: Optional[bool] = None
+    page: int = 1
+    num_pages: int = 2
+    expand_variants: bool = True
+    profile: Optional[UserProfile] = None

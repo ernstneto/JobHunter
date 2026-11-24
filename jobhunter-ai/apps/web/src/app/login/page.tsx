@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/auth";
 
@@ -10,6 +10,13 @@ export default function LoginPage() {
     const [password, setPassword] = useState("12345678");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Sessao expirada / invalida: sinalizar ao usuario
+    useEffect(() => {
+        if (typeof window !== "undefined" && window.location.search.includes("expired=1")) {
+            setError("Sessão expirada. Faça login novamente.");
+        }
+    }, []);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();

@@ -2,9 +2,25 @@
 
 import { useState } from "react";
 import type { Job } from "@/types/job";
-import { fetchSkillQuiz, generateTailoredCv } from "@/services/cvservice";
+import { fetchSkillQuiz, generateTailoredCv } from "@/services/cvService";
+import { useJobTracker } from "@/lib/JobTrackerContext";
+import { useProfile } from "@/lib/ProfileContext";
+import { saveTailoredCv } from "@/lib/cvStorage";
 import SkillQuiz from "./SkillQuiz";
 import CVPreviewModal from "./CVPreviewModal";
+import ApplicationModal from "./ApplicationModal";
+
+// Fallback apenas quando o Master CV do perfil ainda está vazio.
+const DEFAULT_MASTER_CV_TEXT = `
+ERNST - Python & Full Stack Developer
+Location: Brazil / Remote | English: Advanced
+Skills: Python, FastAPI, PostgreSQL, SQL, Docker, Git, React, TypeScript, REST APIs
+
+Professional Experience:
+- Developed scalable REST APIs using FastAPI and PostgreSQL.
+- Implemented microservices and containerized environments with Docker.
+- Integrated LLMs and AI matching engines for web applications.
+`;
 
 function getTypeBadgeColor(type: string): string {
   switch (type.toLowerCase()) {
@@ -30,46 +46,42 @@ export default function JobCard({ job }: { job: Job }) {
   const [quizQuestions, setQuizQuestions] = useState<string[] | null>(null);
   const [generatingCv, setGeneratingCv] = useState(false);
   const [tailoredCvText, setTailoredCvText] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [quizError, setQuizError] = useState<string | null>(null);
+  const [cvError, setCvError] = useState<string | null>(null);
+
+  const { getByJobId } = useJobTracker();
+  const { profile } = useProfile();
+  const tracked = Boolean(getByJobId(job.job_id));
+  const masterCvText = profile.masterCvText?.trim() || DEFAULT_MASTER_CV_TEXT;
   
   const scorePercent = Math.round(Number(job.match_score || 0) * 100);
   const seniorityStr = job.required_seniority ? String(job.required_seniority) : "";
 
-  // 1. Inicia o fluxo carregando o Quiz de Skills
+  // 1. Inicia o fluxo carregando o Quiz de Skills (sempre, sem gerar automaticamente)
   const handleStartTailoring = async () => {
-    const gaps = job.missing_skills || [];
-    if (gaps.length === 0) {
-      // Se nao houver gaps, gera direto
-      handleGenerateCv([]);
-      return;
-    }
-
+    setQuizError(null);
+    setCvError(null);
     setLoadingQuiz(true);
     try {
-      const res = await fetchSkillQuiz(job.job_id, gaps);
+      const res = await fetchSkillQuiz(job.job_id, job.missing_skills || []);
       setQuizQuestions(res.questions);
-    } catch {
-      // Fallback em caso de erro no Quiz
-      handleGenerateCv([]);
+    } catch (err: unknown) {
+      // Nao pula o quiz: o fluxo do produto exige o quiz antes de gerar o CV.
+      setQuizError(
+        "Nao foi possivel carregar o quiz de skills. Verifique se o gateway (8080) e o ai-service (8000) estao rodando e tente novamente."
+      );
     } finally {
       setLoadingQuiz(false);
     }
   };
 
-  // 2. Chama a geracao de CV apos resposta do Quiz
+  // 2. Chama a geracao de CV apos resposta do Quiz e abre o preview em nova aba
   const handleGenerateCv = async (confirmedSkills: string[]) => {
     setQuizQuestions(null);
+    setQuizError(null);
+    setCvError(null);
     setGeneratingCv(true);
-
-    const masterCvText = `
-ERNST - Python & Full Stack Developer
-Location: Brazil / Remote | English: Advanced
-Skills: Python, FastAPI, PostgreSQL, SQL, Docker, Git, React, TypeScript, REST APIs
-
-Professional Experience:
-- Developed scalable REST APIs using FastAPI and PostgreSQL.
-- Implemented microservices and containerized environments with Docker.
-- Integrated LLMs and AI matching engines for web applications.
-`;
 
     try {
       const res = await generateTailoredCv({
@@ -81,9 +93,23 @@ Professional Experience:
         master_cv_text: masterCvText,
       });
 
-      setTailoredCvText(res.cv_text);
-    } catch {
-      alert("Error generating tailored CV. Please try again.");
+      // Salvar a versão e abrir o processamento do CV em uma nova aba
+      saveTailoredCv({
+        cv_text: res.cv_text,
+        job_title: job.title,
+        company: job.company,
+      });
+      const url = `/cv-preview?job_title=${encodeURIComponent(job.title)}&company=${encodeURIComponent(job.company)}`;
+      const opened = window.open(url, "_blank");
+
+      // Popup bloqueado pelo navegador: fallback para o modal inline
+      if (!opened) {
+        setTailoredCvText(res.cv_text);
+      }
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setCvError(detail || "Falha ao gerar o CV. Tente novamente.");
     } finally {
       setGeneratingCv(false);
     }
@@ -172,6 +198,22 @@ Professional Experience:
           )}
         </div>
 
+        {/* Error banners */}
+        {(quizError || cvError) && (
+          <div className="mb-3 space-y-1.5">
+            {quizError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 text-xs px-3 py-2 rounded-lg">
+                ⚠️ {quizError}
+              </div>
+            )}
+            {cvError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 text-xs px-3 py-2 rounded-lg">
+                ⚠️ {cvError}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Footer */}
         <div className="flex items-center justify-between pt-3 border-t border-gray-100 mt-2">
           <button
@@ -180,6 +222,17 @@ Professional Experience:
             className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold rounded-lg transition disabled:opacity-50"
           >
             {loadingQuiz ? "Loading Quiz..." : generatingCv ? "Creating CV..." : "✨ Tailor CV"}
+          </button>
+
+          <button
+            onClick={() => setApplying(true)}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition border ${
+              tracked
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200 cursor-default"
+                : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200"
+            }`}
+          >
+            {tracked ? "✓ No Tracker" : "📝 Candidatar-se"}
           </button>
 
           <a
@@ -209,6 +262,14 @@ Professional Experience:
           company={job.company}
           cvText={tailoredCvText}
           onClose={() => setTailoredCvText(null)}
+        />
+      )}
+
+      {applying && (
+        <ApplicationModal
+          job={job}
+          cvText={tailoredCvText}
+          onClose={() => setApplying(false)}
         />
       )}
     </>

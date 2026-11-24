@@ -22,8 +22,12 @@ async def get_skill_quiz(
     missing_skills: str = Query(..., description="Skills faltantes separadas por virgula")
 ):
     skills_list = [s.strip() for s in missing_skills.split(",") if s.strip()]
-    questions = await generate_skill_quiz(skills_list)
-    
+    try:
+        questions = await generate_skill_quiz(skills_list)
+    except RuntimeError as e:
+        # Erro real do Groq (chave/modelo/rate-limit): retorna 502 com detalhe.
+        raise HTTPException(status_code=502, detail=str(e))
+
     return QuizResponse(job_id=job_id, questions=questions)
 
 @router.post("/generate")
@@ -40,5 +44,8 @@ async def create_tailored_cv(request: CVRequest):
             master_cv_text=request.master_cv_text
         )
         return {"cv_text": cv_text}
+    except RuntimeError as e:
+        # Erro real do Groq: retorna 502 com detalhe para diagnóstico.
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
