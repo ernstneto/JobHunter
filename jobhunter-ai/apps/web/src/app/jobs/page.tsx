@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { searchJobs } from "@/services/jobService";
 import { isAuthenticated, logout } from "@/lib/auth";
 import { useJobTracker } from "@/lib/JobTrackerContext";
+import { useProfile } from "@/lib/ProfileContext";
 import JobCard from "@/components/JobCard";
 import type { Job } from "@/types/job";
 import Link from "next/link";
@@ -24,6 +25,7 @@ export default function JobsPage() {
   const [showApplied, setShowApplied] = useState(false);
 
   const { applications } = useJobTracker();
+  const { profile } = useProfile();
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   // IDs das vagas já candidatadas (Track de Candidaturas)
@@ -62,8 +64,9 @@ export default function JobsPage() {
         page,
         num_pages: numPages,
         expand_variants: expand,
+        profile,
       }),
-    [query, country, remoteOnly]
+    [query, country, remoteOnly, profile]
   );
 
   async function handleSearch(e: React.FormEvent) {
