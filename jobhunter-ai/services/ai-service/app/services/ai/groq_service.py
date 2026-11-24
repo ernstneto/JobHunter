@@ -135,7 +135,7 @@ RETURN ONLY VALID JSON:
     }
 
     try:
-        async with httpx.AsyncClient(verify=False, timeout=8.0) as client:
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
             response = await client.post(GROQ_API_URL, headers=headers, json=body)
             
             if response.status_code == 200:
@@ -207,7 +207,7 @@ DO NOT include any markdown or other text.
     }
 
     try:
-        async with httpx.AsyncClient(verify=False, timeout=8.0) as client:
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
             response = await client.post(GROQ_API_URL, headers=headers, json=body)
             response.raise_for_status()
             result_data = response.json()
@@ -284,7 +284,7 @@ Do NOT use markdown symbols like '#' or '*' in the output, just plain text with 
     }
 
     try:
-        async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
+        async with httpx.AsyncClient(verify=False, timeout=60.0) as client:
             response = await client.post(GROQ_API_URL, headers=headers, json=body)
             response.raise_for_status()
             result_data = response.json()
